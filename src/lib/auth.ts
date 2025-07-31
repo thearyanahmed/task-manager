@@ -6,6 +6,7 @@ import { prisma } from "./prisma"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
+  allowDangerousEmailAccountLinking: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -19,7 +20,28 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account, profile }) {
       console.log("Sign in attempt:", { user: user?.email, account: account?.provider })
-      return true
+      try {
+        // Check if user already exists with this email but different provider
+        if (user.email) {
+          const existingUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            include: { accounts: true }
+          })
+          
+          if (existingUser) {
+            console.log("Existing user found:", { 
+              email: user.email, 
+              providers: existingUser.accounts.map(acc => acc.provider) 
+            })
+            // Allow linking accounts with same email
+            return true
+          }
+        }
+        return true
+      } catch (error) {
+        console.error("Sign in error:", error)
+        return false
+      }
     },
     async redirect({ url, baseUrl }) {
       console.log("Redirect:", { url, baseUrl })
