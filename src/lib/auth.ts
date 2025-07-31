@@ -17,6 +17,18 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      console.log("Sign in attempt:", { user: user?.email, account: account?.provider })
+      return true
+    },
+    async redirect({ url, baseUrl }) {
+      console.log("Redirect:", { url, baseUrl })
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url
+      return baseUrl
+    },
     session: async ({ session, token }) => {
       if (session?.user) {
         session.user.id = token.sub!
@@ -33,7 +45,5 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  pages: {
-    signIn: "/auth/signin",
-  },
+  debug: process.env.NODE_ENV === "development",
 }
