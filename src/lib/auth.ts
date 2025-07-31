@@ -6,7 +6,6 @@ import { prisma } from "./prisma"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  allowDangerousEmailAccountLinking: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -19,24 +18,43 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      console.log("Sign in attempt:", { user: user?.email, account: account?.provider })
+      if (!user.email || !account) return false
+      
       try {
-        // Check if user already exists with this email but different provider
-        if (user.email) {
-          const existingUser = await prisma.user.findUnique({
-            where: { email: user.email },
-            include: { accounts: true }
-          })
+        // Check if user already exists with this email
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+          include: { accounts: true }
+        })
+        
+        if (existingUser) {
+          // Check if this provider is already linked
+          const existingAccount = existingUser.accounts.find(
+            acc => acc.provider === account.provider
+          )
           
-          if (existingUser) {
-            console.log("Existing user found:", { 
-              email: user.email, 
-              providers: existingUser.accounts.map(acc => acc.provider) 
+          if (!existingAccount) {
+            // Link new provider to existing user
+            await prisma.account.create({
+              data: {
+                userId: existingUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                refresh_token: account.refresh_token,
+                access_token: account.access_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+                session_state: account.session_state,
+              }
             })
-            // Allow linking accounts with same email
-            return true
           }
+          return true
         }
+        
+        // User doesn't exist, let NextAuth create new user (default behavior)
         return true
       } catch (error) {
         console.error("Sign in error:", error)
